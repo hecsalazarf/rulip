@@ -1,6 +1,9 @@
+mod endpoint;
+
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Url};
 use serde::{Deserialize, Serialize};
+use endpoint::Endpoint;
 
 pub struct Client {
     base_uri: Url,
@@ -85,7 +88,7 @@ impl ClientBuilder {
             http: reqwest::Client::new(),
             // Notice the slash at the beginning and at the end in order to replace any path
             // from the URI. We append the API path to the domain.
-            base_uri: self.uri?.join("/api/v1/").unwrap(),
+            base_uri: self.uri?.join(Endpoint::BASE_API).unwrap(),
         };
 
         if let Some(key) = self.api_key {
@@ -95,7 +98,7 @@ impl ClientBuilder {
             let params = Credentials::new(self.user.unwrap(), password);
 
             let res = client
-                .send_request(Method::POST, "fetch_api_key", params)
+                .send_request(Method::POST, Endpoint::FETCH_API_KEY, params)
                 .await?;
 
             client.set_credentials(res);
@@ -103,7 +106,7 @@ impl ClientBuilder {
             // Fetch API key from dev server, providing username only.
             let params = Credentials::unauthenticated(user);
             let res = client
-                .send_request(Method::POST, "dev_fetch_api_key", params)
+                .send_request(Method::POST, Endpoint::FETCH_DEV_API_KEY, params)
                 .await?;
 
             client.set_credentials(res);
@@ -169,7 +172,7 @@ mod tests {
             result: "success".to_owned(),
         });
         let mock = Mock::given(matchers::method("POST"))
-            .and(matchers::path(format!("/api/v1/{}", endpoint)))
+            .and(matchers::path(format!("{}{}", Endpoint::BASE_API, endpoint)))
             .respond_with(responder)
             .expect(1);
 
@@ -190,7 +193,7 @@ mod tests {
 
     #[tokio::test]
     async fn prod_auth() -> Result<(), Box<dyn std::error::Error>> {
-        let server = mock_server("fetch_api_key").await;
+        let server = mock_server(Endpoint::FETCH_API_KEY).await;
         let client = Client::build(server.uri())
             .with_credentials(USERNAME, Some(PASSWORD))
             .init()
@@ -211,7 +214,7 @@ mod tests {
 
     #[tokio::test]
     async fn dev_auth() -> Result<(), Box<dyn std::error::Error>> {
-        let server = mock_server("dev_fetch_api_key").await;
+        let server = mock_server(Endpoint::FETCH_DEV_API_KEY).await;
         let client = Client::build(server.uri())
             .with_credentials(USERNAME, None::<String>)
             .init()
