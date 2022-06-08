@@ -1,9 +1,12 @@
 mod endpoint;
 
+#[cfg(test)]
+mod test_util;
+
+use endpoint::Endpoint;
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Url};
 use serde::{Deserialize, Serialize};
-use endpoint::Endpoint;
 
 pub struct Client {
     base_uri: Url,
@@ -151,85 +154,56 @@ impl Credentials {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::string::FromUtf8Error;
-    use wiremock::{matchers, Mock, MockServer, ResponseTemplate};
+    use test_util::{body_as_string, mock_server, MockAuthResponse, MockCredentials};
+    use wiremock::ResponseTemplate;
 
-    const USERNAME: &str = "api_user";
-    const PASSWORD: &str = "arandompassword";
-    const API_KEY: &str = "arandomapikey";
-
-    #[derive(Serialize)]
-    struct ApiKeyResponse {
-        email: String,
-        api_key: Option<String>,
-        result: String,
-    }
-
-    async fn mock_server(endpoint: &str) -> MockServer {
-        let responder = ResponseTemplate::new(200).set_body_json(ApiKeyResponse {
-            email: USERNAME.to_owned(),
-            api_key: Some(API_KEY.to_owned()),
-            result: "success".to_owned(),
-        });
-        let mock = Mock::given(matchers::method("POST"))
-            .and(matchers::path(format!("{}{}", Endpoint::BASE_API, endpoint)))
-            .respond_with(responder)
-            .expect(1);
-
-        let server = MockServer::start().await;
-        server.register(mock).await;
-        server
-    }
-
-    async fn body_as_string(server: &MockServer) -> Result<Option<String>, FromUtf8Error> {
-        server
-            .received_requests()
-            .await
-            .map(|mut v| v.pop())
-            .flatten()
-            .map(|r| String::from_utf8(r.body))
-            .transpose()
+    fn auth_response() -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_json(MockAuthResponse::new())
     }
 
     #[tokio::test]
     async fn prod_auth() -> Result<(), Box<dyn std::error::Error>> {
-        let server = mock_server(Endpoint::FETCH_API_KEY).await;
+        let server = mock_server(auth_response(), Endpoint::FETCH_API_KEY).await;
         let client = Client::build(server.uri())
-            .with_credentials(USERNAME, Some(PASSWORD))
+            .with_credentials(MockCredentials::USERNAME, Some(MockCredentials::PASSWORD))
             .init()
             .await?;
 
         // Check username and password were sent to the server
         assert_eq!(
             body_as_string(&server).await?.unwrap(),
-            format!("username={}&password={}", USERNAME, PASSWORD)
+            format!(
+                "username={}&password={}",
+                MockCredentials::USERNAME,
+                MockCredentials::PASSWORD
+            )
         );
 
         let credentials = client.credentials.as_ref().unwrap();
         // Check credentials
-        assert_eq!(credentials.username(), USERNAME);
-        assert_eq!(credentials.password(), Some(API_KEY));
+        assert_eq!(credentials.username(), MockCredentials::USERNAME);
+        assert_eq!(credentials.password(), Some(MockCredentials::API_KEY));
         Ok(())
     }
 
     #[tokio::test]
     async fn dev_auth() -> Result<(), Box<dyn std::error::Error>> {
-        let server = mock_server(Endpoint::FETCH_DEV_API_KEY).await;
+        let server = mock_server(auth_response(), Endpoint::FETCH_DEV_API_KEY).await;
         let client = Client::build(server.uri())
-            .with_credentials(USERNAME, None::<String>)
+            .with_credentials(MockCredentials::USERNAME, None::<String>)
             .init()
             .await?;
 
         // Check that only username was sent to the server
         assert_eq!(
             body_as_string(&server).await?.unwrap(),
-            format!("username={}", USERNAME)
+            format!("username={}", MockCredentials::USERNAME)
         );
 
         let credentials = client.credentials.as_ref().unwrap();
         // Check credentials
-        assert_eq!(credentials.username(), USERNAME);
-        assert_eq!(credentials.password(), Some(API_KEY));
+        assert_eq!(credentials.username(), MockCredentials::USERNAME);
+        assert_eq!(credentials.password(), Some(MockCredentials::API_KEY));
         Ok(())
     }
 
