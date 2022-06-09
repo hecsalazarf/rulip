@@ -149,6 +149,13 @@ impl ZulipError {
             _ => false,
         }
     }
+
+    pub fn is_auth_failed(&self) -> bool {
+        match self.code {
+            Some(ZulipErrorCode::AuthenticationFailed) => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for ZulipError {
@@ -167,6 +174,9 @@ impl fmt::Display for ZulipError {
                 }
                 ZulipErrorCode::RequestVariableMissing { var_name } => {
                     write!(f, "missing '{}' argument", var_name)?
+                }
+                ZulipErrorCode::AuthenticationFailed => {
+                    write!(f, "authentication failed: {}", self.message)?
                 }
             }
         } else {
@@ -193,6 +203,8 @@ pub enum ZulipErrorCode {
     RealmDeactivated,
     #[serde(rename = "RATE_LIMIT_HIT")]
     RateLimitHit { retry_after: f32 },
+    #[serde(rename = "AUTHENTICATION_FAILED")]
+    AuthenticationFailed,
 }
 
 #[cfg(test)]
@@ -255,6 +267,12 @@ mod tests {
                 "realm_deactivated",
             ))
             .await;
+        server
+            .register(mock(
+                ResponseTemplate::new(400).set_body_json(MockErrorResponse::auth_failed()),
+                "auth_failed",
+            ))
+            .await;
 
         let httpc = HttpClient::new();
         let mut res = send_request(&httpc, server.uri(), "rate_limit").await?;
@@ -267,6 +285,8 @@ mod tests {
         assert!(res.is_realm_deactivated());
         res = send_request(&httpc, server.uri(), "user_deactivated").await?;
         assert!(res.is_user_deactivated());
+        res = send_request(&httpc, server.uri(), "auth_failed").await?;
+        assert!(res.is_auth_failed());
         res = send_request(&httpc, server.uri(), "no_code").await?;
         assert_eq!(res.code, None);
         Ok(())

@@ -77,6 +77,12 @@ impl MockAuthResponse {
             res.code = Some("REALM_DEACTIVATED".to_owned());
             res
         }
+
+        pub fn auth_failed() -> Self {
+            let mut res = Self::new("Your username or password is incorrect");
+            res.code = Some("AUTHENTICATION_FAILED".to_owned());
+            res
+        }
     }
 
 
