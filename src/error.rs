@@ -23,6 +23,13 @@ impl Error {
         }
     }
 
+    pub(crate) fn new_zulip(zulip_error: ZulipError) -> Self {
+        Self {
+            kind: ErrorKind::Zulip(zulip_error),
+            source: None,
+        }
+    }
+
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }

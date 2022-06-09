@@ -7,7 +7,7 @@ mod test_util;
 use endpoint::Endpoint;
 use error::Error;
 use reqwest::Client as HttpClient;
-use reqwest::{IntoUrl, Method, Url};
+use reqwest::{IntoUrl, Method, Response, Url};
 use serde::{Deserialize, Serialize};
 
 pub struct Client {
@@ -17,36 +17,69 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn build<U: IntoUrl>(uri: U) -> ClientBuilder {
-        ClientBuilder::new(uri.into_url())
-    }
-
     fn set_credentials(&mut self, credentials: Credentials) {
         self.credentials.replace(credentials);
     }
 
-    async fn send_request<T, R>(
-        &self,
-        method: Method,
-        endpoint: &str,
-        params: T,
-    ) -> Result<R, Error>
+    async fn deserialize<R>(response: Response) -> R
+    where
+        R: serde::de::DeserializeOwned,
+    {
+        match response.json().await {
+            Ok(data) => data,
+            // Since this function is internally called, we should know the type
+            // of data we expect, otherwise there is implementation issue
+            Err(e) => panic!("{}. This should not happen, report the issue", e),
+        }
+    }
+
+    async fn send<T, R>(&self, method: Method, endpoint: &str, params: T) -> Result<R, Error>
     where
         T: Serialize,
         R: serde::de::DeserializeOwned,
     {
+        let res = self.send_request(method, endpoint, params).await?;
+
+        if res.status().is_client_error() {
+            // Create error from body
+            Err(Error::new_zulip(Client::deserialize(res).await))
+        } else if res.status().is_server_error() {
+            // Create error from status
+            res.error_for_status()?;
+            // Unreachable because we already know that the response has status error code
+            unreachable!();
+        } else if res.status().is_informational() || res.status().is_redirection() {
+            unimplemented!();
+        } else {
+            // Successful response
+            Ok(Client::deserialize(res).await)
+        }
+    }
+
+    pub async fn send_request<S, T>(
+        &self,
+        method: Method,
+        endpoint: S,
+        params: T,
+    ) -> reqwest::Result<reqwest::Response>
+    where
+        S: AsRef<str>,
+        T: Serialize,
+    {
         let mut req = self
             .http
-            .request(method, self.base_uri.join(endpoint).unwrap())
+            .request(method, self.base_uri.join(endpoint.as_ref()).unwrap())
             .form(&params);
 
         if let Some(ref credentials) = self.credentials {
             req = req.basic_auth(credentials.username(), credentials.password());
         }
 
-        let res = req.send().await?.json().await?;
+        req.send().await
+    }
 
-        Ok(res)
+    pub fn build<U: IntoUrl>(uri: U) -> ClientBuilder {
+        ClientBuilder::new(uri.into_url())
     }
 }
 
@@ -103,7 +136,7 @@ impl ClientBuilder {
             let params = Credentials::new(self.user.unwrap(), password);
 
             let res = client
-                .send_request(Method::POST, Endpoint::FETCH_API_KEY, params)
+                .send(Method::POST, Endpoint::FETCH_API_KEY, params)
                 .await?;
 
             client.set_credentials(res);
@@ -111,7 +144,7 @@ impl ClientBuilder {
             // Fetch API key from dev server, providing username only.
             let params = Credentials::unauthenticated(user);
             let res = client
-                .send_request(Method::POST, Endpoint::FETCH_DEV_API_KEY, params)
+                .send(Method::POST, Endpoint::FETCH_DEV_API_KEY, params)
                 .await?;
 
             client.set_credentials(res);
