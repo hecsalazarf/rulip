@@ -1,9 +1,11 @@
 mod endpoint;
+pub mod error;
 
 #[cfg(test)]
 mod test_util;
 
 use endpoint::Endpoint;
+use error::Error;
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Url};
 use serde::{Deserialize, Serialize};
@@ -28,7 +30,7 @@ impl Client {
         method: Method,
         endpoint: &str,
         params: T,
-    ) -> Result<R, Box<dyn std::error::Error>>
+    ) -> Result<R, Error>
     where
         T: Serialize,
         R: serde::de::DeserializeOwned,
@@ -85,7 +87,7 @@ impl ClientBuilder {
         self
     }
 
-    pub async fn init(self) -> Result<Client, Box<dyn std::error::Error>> {
+    pub async fn init(self) -> Result<Client, Error> {
         let mut client = Client {
             credentials: None,
             http: reqwest::Client::new(),
@@ -208,7 +210,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthenticated() -> Result<(), Box<dyn std::error::Error>> {
+    async fn unauthenticated() -> Result<(), Error> {
         let client = Client::build("https://hello.zulipchat.com").init().await?;
 
         // Check credentials
@@ -217,26 +219,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn base_uri() {
+    async fn base_uri() -> Result<(), Error> {
         const CANONICAL_URI: &str = "https://hello.zulipchat.com";
         const BASE_URI: &str = "https://hello.zulipchat.com/api/v1/";
-        let mut res = Client::build(CANONICAL_URI).init().await;
+        let mut client = Client::build(CANONICAL_URI).init().await?;
         assert_eq!(
-            res.unwrap().base_uri.as_str(),
+            client.base_uri.as_str(),
             BASE_URI,
             "Expect the base URI of API"
         );
 
-        res = Client::build(CANONICAL_URI.to_owned() + "/diff/path")
+        client = Client::build(CANONICAL_URI.to_owned() + "/diff/path")
             .init()
-            .await;
+            .await?;
         assert_eq!(
-            res.unwrap().base_uri.as_str(),
+            client.base_uri.as_str(),
             BASE_URI,
             "Expect removal of existing path"
         );
 
-        res = Client::build("invalid_uri").init().await;
-        assert!(res.is_err(), "Expect invalid URI");
+        let error = Client::build("invalid_uri").init().await.err().unwrap();
+        assert!(error.is_build(), "Expect invalid URI");
+        Ok(())
     }
 }
