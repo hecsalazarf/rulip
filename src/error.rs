@@ -112,6 +112,7 @@ pub enum ErrorKind {
 
 #[derive(Deserialize, Debug)]
 pub struct ZulipError {
+    #[serde(rename = "msg")]
     message: String,
     #[serde(flatten)]
     code: Option<ZulipErrorCode>,

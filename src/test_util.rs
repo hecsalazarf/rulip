@@ -30,7 +30,7 @@ impl MockAuthResponse {
 
 #[derive(Serialize)]
     pub struct MockErrorResponse {
-        message: String,
+        msg: String,
         code: Option<String>,
         var_name: Option<String>,
         retry_after: Option<f32>,
@@ -39,7 +39,7 @@ impl MockAuthResponse {
     impl MockErrorResponse {
         pub fn new<M: Into<String>>(message: M) -> Self {
             Self {
-                message: message.into(),
+                msg: message.into(),
                 code: None,
                 var_name: None,
                 retry_after: None,
