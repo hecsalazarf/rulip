@@ -10,6 +10,7 @@ use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Response, Url};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub struct Client {
     base_uri: Url,
     http: HttpClient,
@@ -189,8 +190,9 @@ impl Credentials {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_util::{body_as_string, mock_server, MockAuthResponse, MockCredentials};
+    use test_util::{body_as_string, mock_server, MockAuthResponse, MockCredentials, MockErrorResponse};
     use wiremock::ResponseTemplate;
+    use crate::error::ErrorKind;
 
     fn auth_response() -> ResponseTemplate {
         ResponseTemplate::new(200).set_body_json(MockAuthResponse::new())
@@ -248,6 +250,23 @@ mod tests {
 
         // Check credentials
         assert_eq!(client.credentials, None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn auth_fail() -> Result<(), Box<dyn std::error::Error>> {
+        let template = ResponseTemplate::new(401).set_body_json(MockErrorResponse::auth_failed());
+        let server = mock_server(template, Endpoint::FETCH_API_KEY).await;
+        let error = Client::build(server.uri())
+            .with_credentials(MockCredentials::USERNAME, Some(MockCredentials::PASSWORD))
+            .init()
+            .await
+            .expect_err("Client initialization should return an error");
+
+        match error.kind() {
+            ErrorKind::Zulip(e) => assert!(e.is_auth_failed()),
+            _ => unreachable!()
+        }
         Ok(())
     }
 
