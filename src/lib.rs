@@ -18,6 +18,14 @@ pub struct Client {
 }
 
 impl Client {
+    fn new(base_uri: Url) -> Self {
+        Self {
+            credentials: None,
+            http: reqwest::Client::new(),
+            base_uri,
+        }
+    }
+
     fn set_credentials(&mut self, credentials: Credentials) {
         self.credentials.replace(credentials);
     }
@@ -122,13 +130,10 @@ impl ClientBuilder {
     }
 
     pub async fn init(self) -> Result<Client, Error> {
-        let mut client = Client {
-            credentials: None,
-            http: reqwest::Client::new(),
-            // Notice the slash at the beginning and at the end in order to replace any path
-            // from the URI. We append the API path to the domain.
-            base_uri: self.uri?.join(Endpoint::BASE_API).unwrap(),
-        };
+        // Notice the slash at the beginning and at the end in order to replace any path
+        // from the URI. We append the API path to the domain.
+        let base_uri = self.uri?.join(Endpoint::BASE_API).unwrap();
+        let mut client = Client::new(base_uri);
 
         if let Some(key) = self.api_key {
             client.set_credentials(Credentials::new(self.user.unwrap(), key));
@@ -190,9 +195,11 @@ impl Credentials {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_util::{body_as_string, mock_server, MockAuthResponse, MockCredentials, MockErrorResponse};
-    use wiremock::ResponseTemplate;
     use crate::error::ErrorKind;
+    use test_util::{
+        body_as_string, mock_server, MockAuthResponse, MockCredentials, MockErrorResponse,
+    };
+    use wiremock::ResponseTemplate;
 
     fn auth_response() -> ResponseTemplate {
         ResponseTemplate::new(200).set_body_json(MockAuthResponse::new())
@@ -265,7 +272,7 @@ mod tests {
 
         match error.kind() {
             ErrorKind::Zulip(e) => assert!(e.is_auth_failed()),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
         Ok(())
     }
