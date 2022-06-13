@@ -164,6 +164,13 @@ impl ZulipError {
             _ => false,
         }
     }
+
+    pub fn is_bad_event_queue(&self) -> bool {
+        match self.code {
+            Some(ZulipErrorCode::BadEventQueueId { queue_id: _ }) => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for ZulipError {
@@ -185,6 +192,9 @@ impl fmt::Display for ZulipError {
                 }
                 ZulipErrorCode::AuthenticationFailed => {
                     write!(f, "authentication failed: {}", self.message)?
+                }
+                ZulipErrorCode::BadEventQueueId { queue_id } => {
+                    write!(f, "bad event queue id: {}", queue_id)?
                 }
             }
         } else {
@@ -213,6 +223,8 @@ pub enum ZulipErrorCode {
     RateLimitHit { retry_after: f32 },
     #[serde(rename = "AUTHENTICATION_FAILED")]
     AuthenticationFailed,
+    #[serde(rename = "BAD_EVENT_QUEUE_ID")]
+    BadEventQueueId { queue_id: String },
 }
 
 #[cfg(test)]
@@ -281,6 +293,12 @@ mod tests {
                 "auth_failed",
             ))
             .await;
+        server
+            .register(mock(
+                ResponseTemplate::new(400).set_body_json(MockErrorResponse::bad_event_queue()),
+                "bad_event_queue",
+            ))
+            .await;
 
         let httpc = HttpClient::new();
         let mut res = send_request(&httpc, server.uri(), "rate_limit").await?;
@@ -295,6 +313,8 @@ mod tests {
         assert!(res.is_user_deactivated());
         res = send_request(&httpc, server.uri(), "auth_failed").await?;
         assert!(res.is_auth_failed());
+        res = send_request(&httpc, server.uri(), "bad_event_queue").await?;
+        assert!(res.is_bad_event_queue());
         res = send_request(&httpc, server.uri(), "no_code").await?;
         assert_eq!(res.code, None);
         Ok(())
