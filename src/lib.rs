@@ -1,5 +1,6 @@
 mod endpoint;
 pub mod error;
+mod event;
 
 #[cfg(test)]
 mod test_util;
@@ -9,15 +10,46 @@ use error::Error;
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Response, Url};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+pub struct Client {
+    inner: Arc<ClientInner>,
+}
+
+impl Client {
+    fn new(inner: ClientInner) -> Self {
+        Self {
+            inner: Arc::new(inner),
+        }
+    }
+
+    pub async fn send_request<S, T>(
+        &self,
+        method: Method,
+        endpoint: S,
+        params: T,
+    ) -> reqwest::Result<reqwest::Response>
+    where
+        S: AsRef<str>,
+        T: Serialize,
+    {
+        self.inner.send_request(method, endpoint, params).await
+    }
+
+    pub fn build<U: IntoUrl>(uri: U) -> ClientBuilder {
+        ClientBuilder::new(uri.into_url())
+    }
+}
 
 #[derive(Debug)]
-pub struct Client {
+pub struct ClientInner {
     base_uri: Url,
     http: HttpClient,
     credentials: Option<Credentials>,
 }
 
-impl Client {
+impl ClientInner {
     fn new(base_uri: Url) -> Self {
         Self {
             credentials: None,
@@ -51,7 +83,7 @@ impl Client {
 
         if res.status().is_client_error() {
             // Create error from body
-            Err(Error::new_zulip(Client::deserialize(res).await))
+            Err(Error::new_zulip(Self::deserialize(res).await))
         } else if res.status().is_server_error() {
             // Create error from status
             res.error_for_status()?;
@@ -61,7 +93,7 @@ impl Client {
             unimplemented!();
         } else {
             // Successful response
-            Ok(Client::deserialize(res).await)
+            Ok(Self::deserialize(res).await)
         }
     }
 
@@ -133,30 +165,30 @@ impl ClientBuilder {
         // Notice the slash at the beginning and at the end in order to replace any path
         // from the URI. We append the API path to the domain.
         let base_uri = self.uri?.join(Endpoint::BASE_API).unwrap();
-        let mut client = Client::new(base_uri);
+        let mut inner = ClientInner::new(base_uri);
 
         if let Some(key) = self.api_key {
-            client.set_credentials(Credentials::new(self.user.unwrap(), key));
+            inner.set_credentials(Credentials::new(self.user.unwrap(), key));
         } else if let Some(password) = self.password {
             // Fetch API key from production server, providing username and password.
             let params = Credentials::new(self.user.unwrap(), password);
 
-            let res = client
+            let res = inner
                 .send(Method::POST, Endpoint::FETCH_API_KEY, params)
                 .await?;
 
-            client.set_credentials(res);
+            inner.set_credentials(res);
         } else if let Some(user) = self.user {
             // Fetch API key from dev server, providing username only.
             let params = Credentials::unauthenticated(user);
-            let res = client
+            let res = inner
                 .send(Method::POST, Endpoint::FETCH_DEV_API_KEY, params)
                 .await?;
 
-            client.set_credentials(res);
+            inner.set_credentials(res);
         }
 
-        Ok(client)
+        Ok(Client::new(inner))
     }
 }
 
@@ -223,7 +255,7 @@ mod tests {
             )
         );
 
-        let credentials = client.credentials.as_ref().unwrap();
+        let credentials = client.inner.credentials.as_ref().unwrap();
         // Check credentials
         assert_eq!(credentials.username(), MockCredentials::USERNAME);
         assert_eq!(credentials.password(), Some(MockCredentials::API_KEY));
@@ -244,7 +276,7 @@ mod tests {
             format!("username={}", MockCredentials::USERNAME)
         );
 
-        let credentials = client.credentials.as_ref().unwrap();
+        let credentials = client.inner.credentials.as_ref().unwrap();
         // Check credentials
         assert_eq!(credentials.username(), MockCredentials::USERNAME);
         assert_eq!(credentials.password(), Some(MockCredentials::API_KEY));
@@ -256,7 +288,7 @@ mod tests {
         let client = Client::build("https://hello.zulipchat.com").init().await?;
 
         // Check credentials
-        assert_eq!(client.credentials, None);
+        assert_eq!(client.inner.credentials, None);
         Ok(())
     }
 
@@ -283,7 +315,7 @@ mod tests {
         const BASE_URI: &str = "https://hello.zulipchat.com/api/v1/";
         let mut client = Client::build(CANONICAL_URI).init().await?;
         assert_eq!(
-            client.base_uri.as_str(),
+            client.inner.base_uri.as_str(),
             BASE_URI,
             "Expect the base URI of API"
         );
@@ -292,7 +324,7 @@ mod tests {
             .init()
             .await?;
         assert_eq!(
-            client.base_uri.as_str(),
+            client.inner.base_uri.as_str(),
             BASE_URI,
             "Expect removal of existing path"
         );
