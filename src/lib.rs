@@ -29,7 +29,7 @@ impl Client {
         &self,
         method: Method,
         endpoint: &str,
-        params: T,
+        params: &T,
     ) -> Result<R, Error>
     where
         T: Serialize,
@@ -42,7 +42,7 @@ impl Client {
         &self,
         method: Method,
         endpoint: S,
-        params: T,
+        params: &T,
     ) -> reqwest::Result<reqwest::Response>
     where
         S: AsRef<str>,
@@ -88,7 +88,7 @@ impl ClientInner {
         }
     }
 
-    async fn send<T, R>(&self, method: Method, endpoint: &str, params: T) -> Result<R, Error>
+    async fn send<T, R>(&self, method: Method, endpoint: &str, params: &T) -> Result<R, Error>
     where
         T: Serialize,
         R: serde::de::DeserializeOwned,
@@ -115,7 +115,7 @@ impl ClientInner {
         &self,
         method: Method,
         endpoint: S,
-        params: T,
+        params: &T,
     ) -> reqwest::Result<reqwest::Response>
     where
         S: AsRef<str>,
@@ -127,9 +127,9 @@ impl ClientInner {
         );
 
         if method == Method::GET {
-            req = req.query(&params)
+            req = req.query(params)
         } else {
-            req = req.form(&params)
+            req = req.form(params)
         }
 
         if let Some(ref credentials) = self.credentials {
@@ -194,7 +194,7 @@ impl ClientBuilder {
             let params = Credentials::new(self.user.unwrap(), password);
 
             let res = inner
-                .send(Method::POST, Endpoint::FETCH_API_KEY, params)
+                .send(Method::POST, Endpoint::FETCH_API_KEY, &params)
                 .await?;
 
             inner.set_credentials(res);
@@ -202,7 +202,7 @@ impl ClientBuilder {
             // Fetch API key from dev server, providing username only.
             let params = Credentials::unauthenticated(user);
             let res = inner
-                .send(Method::POST, Endpoint::FETCH_DEV_API_KEY, params)
+                .send(Method::POST, Endpoint::FETCH_DEV_API_KEY, &params)
                 .await?;
 
             inner.set_credentials(res);
