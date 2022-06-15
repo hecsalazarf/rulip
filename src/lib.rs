@@ -1,12 +1,13 @@
 mod endpoint;
-pub mod error;
-mod event;
+mod error;
+pub mod event;
 
 #[cfg(test)]
 mod test_util;
 
+pub use error::Error;
+
 use endpoint::Endpoint;
-use error::Error;
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Response, Url};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,19 @@ impl Client {
         Self {
             inner: Arc::new(inner),
         }
+    }
+
+    pub(crate) async fn send<T, R>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        params: T,
+    ) -> Result<R, Error>
+    where
+        T: Serialize,
+        R: serde::de::DeserializeOwned,
+    {
+        self.inner.send(method, endpoint, params).await
     }
 
     pub async fn send_request<S, T>(
@@ -107,10 +121,16 @@ impl ClientInner {
         S: AsRef<str>,
         T: Serialize,
     {
-        let mut req = self
-            .http
-            .request(method, self.base_uri.join(endpoint.as_ref()).unwrap())
-            .form(&params);
+        let mut req = self.http.request(
+            method.clone(),
+            self.base_uri.join(endpoint.as_ref()).unwrap(),
+        );
+
+        if method == Method::GET {
+            req = req.query(&params)
+        } else {
+            req = req.form(&params)
+        }
 
         if let Some(ref credentials) = self.credentials {
             req = req.basic_auth(credentials.username(), credentials.password());
