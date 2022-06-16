@@ -5,7 +5,7 @@ use std::fmt;
 
 pub struct Error {
     kind: ErrorKind,
-    source: Option<Box<dyn StdError>>,
+    source: Option<Box<dyn StdError + Send + Sync>>,
 }
 
 impl Error {
@@ -89,7 +89,7 @@ impl fmt::Debug for Error {
 
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        self.source.as_ref().map(|s| s.as_ref())
+        self.source.as_ref().map(|s| s.as_ref() as _)
     }
 }
 
