@@ -145,10 +145,15 @@ struct RegisterQueueRequest {
     apply_markdown: Option<bool>,
     client_gravatar: Option<bool>,
     slim_presence: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serialize")]
     event_types: Option<Vec<String>>,
     all_public_streams: Option<bool>,
     include_subscribers: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serialize")]
     narrow: Option<Vec<[String; 2]>>,
+    #[serde(serialize_with = "crate::serialize")]
     client_capabilities: ClientCapabilities,
 }
 
@@ -176,9 +181,9 @@ impl Default for ClientCapabilities {
 #[derive(Deserialize)]
 struct RegisterQueueResponse {
     queue_id: String,
-    _zulip_version: String,
-    _zulip_feature_level: u16,
-    _zulip_merge_base: String,
+    // zulip_version: String,
+    // zulip_feature_level: u16,
+    // zulip_merge_base: String,
     last_event_id: i32,
 }
 

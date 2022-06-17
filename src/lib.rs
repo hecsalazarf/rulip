@@ -132,9 +132,9 @@ impl ClientInner {
         );
 
         if method == Method::GET {
-            req = req.query(params)
+            req = req.query(params);
         } else {
-            req = req.form(params)
+            req = req.form(params);
         }
 
         if let Some(ref credentials) = self.credentials {
@@ -142,10 +142,6 @@ impl ClientInner {
         }
 
         req.send().await
-    }
-
-    pub fn build<U: IntoUrl>(uri: U) -> ClientBuilder {
-        ClientBuilder::new(uri.into_url())
     }
 }
 
@@ -359,3 +355,20 @@ mod tests {
         Ok(())
     }
 }
+
+mod ser {
+    use serde::ser::Error;
+    use serde::{Serialize, Serializer};
+
+    pub(crate) fn serialize<T: ?Sized + Serialize, S: Serializer>(
+        value: &T,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match serde_json::to_string(value) {
+            Ok(json) => serializer.serialize_str(&json),
+            Err(_) => Err(Error::custom("Failed to serialize &T to json")),
+        }
+    }
+}
+
+pub(crate) use ser::serialize;
