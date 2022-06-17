@@ -30,6 +30,11 @@ impl Queue {
     pub async fn events(&mut self) -> Result<Vec<Event>, Error> {
         self.dispatcher.events().await
     }
+
+    pub async fn unregister(self) -> Result<(), Error> {
+        self.dispatcher.unregister().await?;
+        Ok(())
+    }
 }
 
 pub struct QueueBuilder {
@@ -132,12 +137,32 @@ impl Dispatcher {
             break Ok(events);
         }
     }
+
+    async fn unregister(&self) -> Result<EmptyResponse, Error> {
+        let params = UnregisterQueueRequest::from(&self.params);
+        self.client
+            .send(Method::DELETE, Endpoint::EVENTS_QUEUE, &params)
+            .await
+    }
 }
 
 #[derive(Serialize, Clone)]
 struct DispatcherParams {
     queue_id: String,
     last_event_id: i32,
+}
+
+#[derive(Serialize)]
+struct UnregisterQueueRequest<'a> {
+    queue_id: &'a str,
+}
+
+impl<'a> From<&'a DispatcherParams> for UnregisterQueueRequest<'a> {
+    fn from(value: &'a DispatcherParams) -> Self {
+        Self {
+            queue_id: &value.queue_id,
+        }
+    }
 }
 
 #[derive(Serialize, Default)]
@@ -245,3 +270,6 @@ pub enum EventOp {
     #[serde(rename = "update_dict")]
     UpdateDict,
 }
+
+#[derive(Deserialize)]
+struct EmptyResponse {}

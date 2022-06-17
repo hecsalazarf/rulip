@@ -12,7 +12,7 @@ pub fn initialize() {
 
 #[tokio::test]
 #[ignore]
-async fn register() -> Result<(), Error> {
+async fn register_unregister() -> Result<(), Error> {
     initialize();
     let username = env::var("ZULIP_USERNAME").expect("Zulip username");
     let api_key = env::var("ZULIP_API_KEY").expect("Zulip API key");
@@ -26,5 +26,6 @@ async fn register() -> Result<(), Error> {
     println!("Queue registered with ID: '{}'", queue.id());
     assert!(queue.id().len() > 0);
     assert_eq!(queue.last_event_id(), -1);
+    queue.unregister().await?;
     Ok(())
 }
