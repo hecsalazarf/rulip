@@ -8,6 +8,7 @@ mod test_util;
 pub use error::Error;
 
 use endpoint::Endpoint;
+use event::QueueBuilder;
 use reqwest::Client as HttpClient;
 use reqwest::{IntoUrl, Method, Response, Url};
 use serde::{Deserialize, Serialize};
@@ -53,6 +54,10 @@ impl Client {
 
     pub fn build<U: IntoUrl>(uri: U) -> ClientBuilder {
         ClientBuilder::new(uri.into_url())
+    }
+
+    pub fn queue(&self) -> QueueBuilder {
+        QueueBuilder::new(self.clone())
     }
 }
 
