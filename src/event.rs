@@ -23,6 +23,10 @@ impl Queue {
         self.dispatcher.queue_id()
     }
 
+    pub fn last_event_id(&self) -> i32 {
+        self.dispatcher.last_event_id()
+    }
+
     pub async fn events(&mut self) -> Result<Vec<Event>, Error> {
         self.dispatcher.events().await
     }
@@ -104,6 +108,10 @@ struct Dispatcher {
 impl Dispatcher {
     fn queue_id(&self) -> &str {
         self.params.queue_id.as_str()
+    }
+
+    fn last_event_id(&self) -> i32 {
+        self.params.last_event_id
     }
 
     async fn fetch_events(&self) -> Result<EventsResponse, Error> {
