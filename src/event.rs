@@ -76,11 +76,15 @@ impl QueueBuilder {
     }
 
     pub fn for_event<T: Into<String>>(mut self, event: T) -> Self {
+        let event = event.into();
         let events = self
             .request
             .event_types
             .get_or_insert(Vec::with_capacity(1));
-        events.push(event.into());
+
+        if events.iter().find(|evt| evt == &&event).is_none() {
+            events.push(event);
+        }
         self
     }
 
@@ -89,8 +93,17 @@ impl QueueBuilder {
         C: Into<String>,
         V: Into<String>,
     {
+        let condition = condition.into();
+        let value = value.into();
+
         let events = self.request.narrow.get_or_insert(Vec::with_capacity(1));
-        events.push([condition.into(), value.into()]);
+        if events
+            .iter()
+            .find(|[c, v]| c == &condition && v == &value)
+            .is_none()
+        {
+            events.push([condition, value]);
+        }
         self
     }
 
@@ -273,3 +286,32 @@ pub enum EventOp {
 
 #[derive(Deserialize)]
 struct EmptyResponse {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn queue_builder() -> Result<(), Error> {
+        let client = Client::build("https://example.com").init().await?;
+        let builder = client
+            .queue()
+            .for_event("reaction")
+            .for_event("reaction")
+            .narrow("stream", "general")
+            .narrow("is", "public")
+            .narrow("is", "public")
+            .narrow("is", "private");
+
+        assert_eq!(
+            builder.request.narrow,
+            Some(vec![
+                ["stream".into(), "general".into()],
+                ["is".into(), "public".into()],
+                ["is".into(), "private".into()],
+            ])
+        );
+        assert_eq!(builder.request.event_types, Some(vec!["reaction".into()]));
+        Ok(())
+    }
+}
