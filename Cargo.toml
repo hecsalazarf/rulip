@@ -13,3 +13,4 @@ tokio = { version = "1.18.2", features=["sync", "rt"] }
 [dev-dependencies]
 tokio = { version = "1.18.2", features = ["macros"] }
 wiremock = "0.5.13"
+dotenv = "0.15.0"
